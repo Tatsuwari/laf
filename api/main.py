@@ -16,7 +16,7 @@ from laf.agents.generator import GeneratorAgent
 from laf.agents.critic import CriticAgent
 from laf.pipeline import TaskPipeline
 
-app = FastAPI(title="GenTech Agent API", version="0.1.0")
+app = FastAPI(title="Laf API", version="0.1.0")
 
 class TaskReq(BaseModel):
     task: str
