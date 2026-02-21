@@ -2,19 +2,19 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from pathlib import Path
 
-from gentech_agent.config import SystemConfig
-from gentech_agent.llm import LLM
-from gentech_agent.planner import PlannerAgent
-from gentech_agent.intents.store import IntentStore
-from gentech_agent.intents.logger import IntentLogger
-from gentech_agent.intents.router import HybridIntentRouter
-from gentech_agent.plugins.registry import ToolRegistry
-from gentech_agent.plugins.loader import load_plugins
-from gentech_agent.plugins.builtins import setup_builtins
-from gentech_agent.rag.store import InMemoryVectorStore, load_jsonl
-from gentech_agent.agents.generator import GeneratorAgent
-from gentech_agent.agents.critic import CriticAgent
-from gentech_agent.pipeline import TaskPipeline
+from laf.config import SystemConfig
+from laf.llm import LLM
+from laf.planner import PlannerAgent
+from laf.intents.store import IntentStore
+from laf.intents.logger import IntentLogger
+from laf.intents.router import HybridIntentRouter
+from laf.plugins.registry import ToolRegistry
+from laf.plugins.loader import load_plugins
+from laf.plugins.builtins import setup_builtins
+from laf.rag.store import InMemoryVectorStore, load_jsonl
+from laf.agents.generator import GeneratorAgent
+from laf.agents.critic import CriticAgent
+from laf.pipeline import TaskPipeline
 
 app = FastAPI(title="GenTech Agent API", version="0.1.0")
 
