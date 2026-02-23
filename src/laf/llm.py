@@ -10,7 +10,7 @@ class LLM:
         self.dtype = profile.dtype
         self.device_map = profile.device_map
 
-        self.tokenizer = AutoTokenizer.from_pretrained(cfg.model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             torch_dtype=self.dtype,
