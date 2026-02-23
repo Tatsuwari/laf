@@ -1,35 +1,65 @@
 # Laf
 
-## An Agentic + RAG + Plugin System with Intent Routing
+Laf is a modular agent orchestration framework built around structured planning, intent routing, retrieval, and tool execution.
 
-Laf is a modular agent framework that combines planning, intent routing, retrieval, and plugin-based tool execution into one clean orchestration system.
-
-It is designed to be lightweight for demos but structured for long-term scalability.
-
-Laf takes a user task, breaks it into subtasks, determines what each step represents, optionally retrieves supporting knowledge, and generates a structured response. It can also execute tools through a dynamic plugin system.
+It is designed to start simple and grow into a scalable, long-term agent system.
 
 ---
 
-# What Laf Does
+## Overview
 
-Given a user request like:
+Given a user task, Laf:
 
-> "Compare LSTM and Transformers for time series forecasting."
+1. Generates a structured plan
+2. Validates the plan
+3. Routes each step into an intent
+4. Optionally executes tools
+5. Optionally retrieves supporting documents (RAG)
+6. Generates a response
+7. Logs a full execution trace
 
-Laf will:
-
-* Generate structured subtasks
-* Classify each step into an intent
-* Optionally retrieve supporting documents
-* Generate a grounded answer
-* Optionally refine the response
-* Optionally execute relevant tools
-
-Laf is not just a chatbot — it is a task orchestration engine built around intent.
+Laf is not a chatbot.
+It is a task orchestration engine built around intent-driven reasoning.
 
 ---
 
-# Installation
+## Current Features
+
+### Core Engine
+
+* Structured Planner (JSON-based planning)
+* Plan Reviewer (validation layer)
+* Swappable plan formats (linear / tree / dag)
+* Hybrid Intent Router (embedding similarity + LLM fallback)
+* Dynamic intent growth
+* Plugin-based tool registry
+* Tool schema validation
+
+### Retrieval & Generation
+
+* Short-term semantic retrieval (RAG)
+* Optional reflection layer (critic agent)
+* Configurable generation settings
+
+### Runtime & Observability
+
+* Multi-instance model pool (same model, multiple instances)
+* Round-robin scheduling
+* Multi-run execution support
+* Per-instance performance metrics
+* Full execution trace (JSONL per task)
+* Artifact download per task (ZIP)
+
+---
+
+## Installation
+
+Clone the repository:
+
+```bash
+git clone https://github.com/Tatsuwari/laf
+cd laf
+```
 
 Create a virtual environment:
 
@@ -44,6 +74,12 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
+Install Laf as a package (important):
+
+```bash
+pip install .
+```
+
 Core dependencies include:
 
 * transformers
@@ -56,9 +92,9 @@ Core dependencies include:
 
 ---
 
-# Running Laf
+## Running the API
 
-Start the API server:
+Start the server:
 
 ```bash
 uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
@@ -67,100 +103,95 @@ uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 Health check:
 
 ```bash
-curl http://localhost:8000/v1/health
+curl http://localhost:8000/v1/system/health
 ```
 
 ---
 
-# Example Usage
+## Running a Task
 
-Planning only:
-
-```
-POST /v1/plan
-{
-  "task": "Build a small vegetable garden in my backyard."
-}
-```
-
-Route intents:
-
-```
-POST /v1/route
-{
-  "task": "Compare LSTM and Transformers for time series forecasting."
-}
-```
-
-Full execution:
+Endpoint:
 
 ```
 POST /v1/run
+```
+
+Example request:
+
+```json
 {
-  "task": "...",
+  "task": "Compare LSTM and Transformers for time series forecasting.",
   "execute_tools": false,
   "use_rag": true,
-  "reflect": true
+  "reflect": true,
+  "runs": 3
 }
 ```
 
----
-
-# Configuration
-
-Laf is configurable through its system configuration module.
-
-Important settings include:
-
-* `model_name` — The language model used for planning and generation (default: `Qwen/Qwen2.5-3B-Instruct`)
-* `embed_model` — The embedding model used for similarity and retrieval
-* `similarity_threshold` — Controls when a new intent should be created
-* `max_steps` — Maximum number of planner steps per task
-* `plugin_dir` — Directory containing external tools
-* `intent_store_path` — File path where learned intents are persisted
-
-Adjusting the similarity threshold controls how adaptive the system becomes:
-
-* Higher value → more strict routing
-* Lower value → more dynamic intent growth
+The `runs` parameter allows executing the same task multiple times across model instances.
 
 ---
 
-# Future Goals
+## Execution Traces
 
-Short-Term Goals:
+Each task produces a structured trace stored under:
 
-* Persistent vector database backend (FAISS / Qdrant / Milvus)
-* Streaming generation responses
-* Intent analytics and monitoring
-* Confidence-based routing improvements
+```
+data/traces/{task_id}/trace.jsonl
+```
 
-Mid-Term Goals:
+You can download artifacts via:
 
-* Multi-agent coordination
-* Memory layer (episodic + semantic)
-* Tool execution sandboxing
-* Automated answer quality scoring
+```
+GET /v1/artifacts/{task_id}
+```
 
-Long-Term Goals:
+This enables:
 
-* Distributed intent sharing
-* Self-optimizing routing thresholds
-* Plugin recommendation system
-* Reinforcement-style feedback loop
-* Autonomous task chains
+* Debugging
+* Performance analysis
+* Future memory construction
 
 ---
 
-# Design Philosophy
+## Configuration
 
-Laf is built around separation of concerns and modular growth.
+Laf is configured through `SystemConfig`.
 
-Each layer can evolve independently:
+Key settings:
 
-* Planner logic can improve without touching retrieval
-* Intent routing can scale without retraining models
-* Tools can be added without modifying the core engine
-* Generator models can be swapped without redesigning architecture
+* `model_name` – language model used for planning and generation
+* `embed_model` – embedding model for routing and retrieval
+* `similarity_threshold` – controls new intent creation sensitivity
+* `max_steps` – planner step limit
+* `plan_format` – linear, tree, or dag
+* `trace_enabled` – enables execution tracing
+* `trace_dir` – trace storage location
 
-Laf starts simple, but it is designed to scale into a powerful intent-driven orchestration system.
+Adjusting the similarity threshold changes how adaptive the intent system becomes.
+
+---
+
+## Roadmap (Toward v1)
+
+* Async execution support
+* Improved plugin system and documentation
+* Quantized model support
+* Streaming responses
+* Basic evaluation metrics
+* Clean release packaging
+
+---
+
+## Design Philosophy
+
+Laf is built with:
+
+* Clear separation of concerns
+* Replaceable subsystems
+* Observability-first execution
+* Scalable architecture
+
+Each layer can evolve independently without breaking the rest of the system.
+
+Laf begins as a structured task engine and is designed to evolve into a long-term adaptive agent framework.

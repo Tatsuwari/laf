@@ -1,6 +1,13 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import torch
+
+@dataclass
+class ModelProfile:
+    model_name: str
+    dtype: torch.dtype = torch.float16
+    device_map: str = "auto"
+
 
 @dataclass
 class GenConfig:
@@ -13,11 +20,18 @@ class GenConfig:
 
 @dataclass
 class SystemConfig:
-    model_name: str = "Qwen/Qwen2.5-3B-Instruct"
-    dtype: torch.dtype = torch.float16
-    device_map: str = "auto"
+    
+    # model profile
+    model_profiles: dict = field(default_factory=lambda: {
+        'fast': ModelProfile(model_name="Qwen/Qwen2.5-3B-Instruct"),
+        'medium': ModelProfile(model_name="Qwen/Qwen2.5-7B-Instruct"),
+        'heavy': ModelProfile(model_name="Qwen/Qwen2.5-14B-Instruct"),
+    })
+    active_profile: str = 'fast'
 
     embed_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    
+    # storage
     intent_store_path: Path = Path("data/intent_store.json")
     plugin_dir: Path = Path("plugins_ext")
 
@@ -33,3 +47,10 @@ class SystemConfig:
     intent_log_path: Path = Path("data/intent_logs.jsonl")
     log_if_created_new: bool = True
     log_if_below_threshold: float = 0.55
+
+    # pipeline
+    trace_enabled: bool = True
+    trace_dir: Path = Path("data/traces")
+    plan_format: str = "linear"  # linear | tree | dag
+
+    pool_size: int = 1 # number of model instances to load on startup

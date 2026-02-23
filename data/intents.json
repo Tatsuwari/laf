@@ -1,0 +1,152 @@
+{
+  "version": "1.0.0",
+  "updated_at": "2026-02-21",
+  "policy": {
+    "intent_growth": "locked",
+    "notes": [
+      "Intents are stable behavior categories, not topic labels.",
+      "Router must always select one of these intents (or fall back to 'research').",
+      "Do not auto-create new intents from user tasks."
+    ]
+  },
+  "intents": [
+    {
+      "key": "research",
+      "description": "Gather information, constraints, documentation, or requirements. Use when the task needs reading, searching, or clarifying unknowns.",
+      "default_tool": "manual_review",
+      "rag": {
+        "eligible": true,
+        "default_top_k": 6,
+        "min_confidence_to_use": 0.55
+      },
+      "examples": [
+        "Research Bitcoin Testnet integration options",
+        "Look up best practices for REST API auth and rate limits",
+        "Compare datasets and identify suitability",
+        "Find libraries needed for a feature"
+      ],
+      "aliases": [
+        "lookup",
+        "discover",
+        "investigate"
+      ]
+    },
+    {
+      "key": "design",
+      "description": "Architect structure and interfaces: API endpoints, schemas, models, workflows, and system diagrams. Use when producing a blueprint rather than writing code.",
+      "default_tool": "manual_review",
+      "rag": {
+        "eligible": true,
+        "default_top_k": 4,
+        "min_confidence_to_use": 0.60
+      },
+      "examples": [
+        "Define API endpoints and their request/response formats",
+        "Design database schema for wallets and transactions",
+        "Define a transaction log model and event format",
+        "Create service boundaries and module interfaces"
+      ],
+      "aliases": [
+        "architecture",
+        "spec",
+        "blueprint"
+      ]
+    },
+    {
+      "key": "implement",
+      "description": "Implement logic and code: routes, algorithms, integrations, transformations. Use when creating or changing real code behavior.",
+      "default_tool": "manual_review",
+      "rag": {
+        "eligible": false,
+        "default_top_k": 0,
+        "min_confidence_to_use": 0.0
+      },
+      "examples": [
+        "Implement 90/10 fund split logic",
+        "Add wallet creation and funding routes",
+        "Integrate Bitcoin Testnet client and broadcast flow",
+        "Write preprocessing code for a dataset"
+      ],
+      "aliases": [
+        "build",
+        "code",
+        "develop"
+      ]
+    },
+    {
+      "key": "validate",
+      "description": "Test and verify correctness: unit tests, integration tests, metrics evaluation, and scenario checks. Use when measuring quality or correctness.",
+      "default_tool": "manual_review",
+      "rag": {
+        "eligible": false,
+        "default_top_k": 0,
+        "min_confidence_to_use": 0.0
+      },
+      "examples": [
+        "Write unit tests for endpoints",
+        "Test 90/10 split with edge cases",
+        "Evaluate model accuracy/precision/recall",
+        "Run regression checks after changes"
+      ],
+      "aliases": [
+        "test",
+        "verify",
+        "evaluate"
+      ]
+    },
+    {
+      "key": "deploy",
+      "description": "Prepare environments and release: staging/prod deployment, containers, configs, secrets, CI/CD steps. Use when shipping or running the system.",
+      "default_tool": "manual_review",
+      "rag": {
+        "eligible": true,
+        "default_top_k": 4,
+        "min_confidence_to_use": 0.55
+      },
+      "examples": [
+        "Deploy API to staging",
+        "Write Dockerfile and compose setup",
+        "Configure env vars and secrets",
+        "Set up CI pipeline for tests + deploy"
+      ],
+      "aliases": [
+        "release",
+        "ship",
+        "ops"
+      ]
+    },
+    {
+      "key": "monitor",
+      "description": "Observe and maintain: logging, tracing, metrics, error handling, performance tuning, and long-term upkeep. Use when improving stability and operability.",
+      "default_tool": "manual_review",
+      "rag": {
+        "eligible": true,
+        "default_top_k": 4,
+        "min_confidence_to_use": 0.55
+      },
+      "examples": [
+        "Implement API request logging",
+        "Add structured transaction logs",
+        "Add rate limiting and audit trails",
+        "Debug router failures and improve fallbacks"
+      ],
+      "aliases": [
+        "maintenance",
+        "observability",
+        "debug"
+      ]
+    }
+  ],
+  "routing_defaults": {
+    "fallback_intent": "research",
+    "min_confidence": 0.45,
+    "tie_break_order": [
+      "design",
+      "implement",
+      "validate",
+      "deploy",
+      "monitor",
+      "research"
+    ]
+  }
+}

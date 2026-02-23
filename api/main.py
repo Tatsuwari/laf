@@ -1,6 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from pathlib import Path
+import zipfile
+import time
 
 from laf.config import SystemConfig
 from laf.llm import LLM
@@ -16,97 +19,151 @@ from laf.agents.generator import GeneratorAgent
 from laf.agents.critic import CriticAgent
 from laf.pipeline import TaskPipeline
 
-app = FastAPI(title="Laf API", version="0.1.0")
+app = FastAPI(title="Laf API", version="0.3.0")
+
+# --------------------------------------------------
+# Request Model
+# --------------------------------------------------
 
 class TaskReq(BaseModel):
     task: str
     execute_tools: bool = False
     use_rag: bool = False
     reflect: bool = False
+    runs: int = 1  # number of times to execute
+
+# --------------------------------------------------
+# Startup
+# --------------------------------------------------
 
 @app.on_event("startup")
 def startup():
     cfg = SystemConfig()
-    cfg.intent_store_path.parent.mkdir(parents=True, exist_ok=True)
-    cfg.plugin_dir.mkdir(parents=True, exist_ok=True)
 
-    llm = LLM(cfg)
+    model_pool = []
 
-    # intent store
-    store = IntentStore(cfg.intent_store_path, cfg.embed_model)
-    store.load()
-    if not store.intents:
-        # seed some starter intents
-        store.add_intent("research", "Gather information, constraints, requirements.", tool="manual_review")
-        store.add_intent("planning", "Plan structure, layout, order of work.", tool="manual_review")
-        store.add_intent("execution", "Perform concrete build/implementation steps.", tool="manual_review")
-        store.add_intent("maintenance", "Monitor, maintain, iterate, fix issues.", tool="manual_review")
-        store.save()
+    for i in range(cfg.pool_size):
+        print(f"Loading model instance {i}")
 
-    logger = IntentLogger(cfg.intent_log_path)
-    router = HybridIntentRouter(llm=llm, store=store, cfg=cfg, logger=logger)
+        llm = LLM(cfg)
 
-    # tools/plugins
-    tools = ToolRegistry()
-    setup_builtins(tools)
-    load_plugins(cfg.plugin_dir, tools)
+        store = IntentStore(cfg.intent_store_path, cfg.embed_model)
+        store.load()
 
-    # RAG store
-    rag_store = InMemoryVectorStore(store.embedder)
-    load_jsonl(rag_store, Path("data/docs.jsonl"))
+        logger = IntentLogger(cfg.intent_log_path)
+        router = HybridIntentRouter(llm=llm, store=store, cfg=cfg, logger=logger)
 
-    pipeline = TaskPipeline(
-        cfg=cfg,
-        llm=llm,
-        planner=PlannerAgent(llm, cfg),
-        router=router,
-        tools=tools,
-        rag_store=rag_store,
-        generator=GeneratorAgent(llm),
-        critic=CriticAgent(llm),
-)
+        tools = ToolRegistry()
+        setup_builtins(tools)
+        load_plugins(cfg.plugin_dir, tools)
 
-    app.state.cfg = cfg
-    app.state.llm = llm
-    app.state.intent_store = store
-    app.state.router = router
-    app.state.tools = tools
-    app.state.rag_store = rag_store
-    app.state.pipeline = pipeline
+        rag_store = InMemoryVectorStore(store.embedder)
+        load_jsonl(rag_store, Path("data/docs.jsonl"))
 
-@app.get("/v1/health")
+        pipeline = TaskPipeline(
+            cfg=cfg,
+            llm=llm,
+            planner=PlannerAgent(llm, cfg),
+            router=router,
+            tools=tools,
+            rag_store=rag_store,
+            generator=GeneratorAgent(llm),
+            critic=CriticAgent(llm),
+        )
+
+        model_pool.append({
+            "pipeline": pipeline,
+            "metrics": {
+                "runs": 0,
+                "total_time": 0.0
+            }
+        })
+
+    app.state.model_pool = model_pool
+    app.state.pool_index = 0  # round robin pointer
+
+# --------------------------------------------------
+# Helpers
+# --------------------------------------------------
+
+def get_next_instance():
+    pool = app.state.model_pool
+    idx = app.state.pool_index
+    app.state.pool_index = (idx + 1) % len(pool)
+    return pool[idx]
+
+# --------------------------------------------------
+# Routes
+# --------------------------------------------------
+
+@app.get("/v1/system/health")
 def health():
-    return {"ok": True}
-
-@app.get("/v1/intents")
-def intents():
-    store: IntentStore = app.state.intent_store
     return {
-        "count": len(store.intents),
-        "intents": [
-            {"key": v.key, "description": v.description, "tool": v.tool, "examples": len(v.examples)}
-            for v in store.intents.values()
-        ]
+        "ok": True,
+        "instances": len(app.state.model_pool)
     }
 
-@app.get("/v1/plugins")
-def plugins():
-    tools: ToolRegistry = app.state.tools
-    return {"tools": [{"name": t.name, "description": t.description} for t in tools.tools.values()]}
-
-@app.post("/v1/plan")
-def plan(req: TaskReq):
-    pipeline: TaskPipeline = app.state.pipeline
-    out = pipeline.run(req.task, execute_tools=False, use_rag=False, reflect=False)
-    return {"task": req.task, "plan": out["plan"]}
-
-@app.post("/v1/route")
-def route(req: TaskReq):
-    pipeline: TaskPipeline = app.state.pipeline
-    out = pipeline.run(req.task, execute_tools=False, use_rag=False, reflect=False)
-    return {"task": req.task, "plan": out["plan"], "routed_steps": out["routed_steps"]}
+@app.get("/v1/system/metrics")
+def metrics():
+    pool = app.state.model_pool
+    return [
+        {
+            "instance": i,
+            "runs": p["metrics"]["runs"],
+            "total_time_sec": p["metrics"]["total_time"]
+        }
+        for i, p in enumerate(pool)
+    ]
 
 @app.post("/v1/run")
 def run(req: TaskReq):
-    pipeline: TaskPipeline = app.state.pipeline
-    return pipeline.run(req.task, execute_tools=req.execute_tools, use_rag=req.use_rag, reflect=req.reflect)
+
+    if req.runs < 1:
+        raise HTTPException(status_code=400, detail="runs must be >= 1")
+
+    results = []
+
+    for _ in range(req.runs):
+        instance = get_next_instance()
+        pipeline = instance["pipeline"]
+
+        start = time.time()
+
+        result = pipeline.run(
+            req.task,
+            execute_tools=req.execute_tools,
+            use_rag=req.use_rag,
+            reflect=req.reflect
+        )
+
+        duration = time.time() - start
+
+        instance["metrics"]["runs"] += 1
+        instance["metrics"]["total_time"] += duration
+
+        result["performance"] = {
+            "duration_sec": duration
+        }
+
+        results.append(result)
+
+    return {
+        "task": req.task,
+        "runs_requested": req.runs,
+        "results": results
+    }
+
+@app.get("/v1/artifacts/{task_id}")
+def download_trace(task_id: str):
+    trace_dir = Path("data/traces") / task_id
+
+    if not trace_dir.exists():
+        raise HTTPException(status_code=404, detail="Trace not found")
+
+    zip_path = trace_dir.parent / f"{task_id}.zip"
+
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for file in trace_dir.glob("*"):
+            zf.write(file, arcname=file.name)
+
+    return FileResponse(zip_path, media_type="application/zip", filename=f"{task_id}.zip")

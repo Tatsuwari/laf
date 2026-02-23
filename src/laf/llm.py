@@ -4,11 +4,17 @@ from .config import SystemConfig, GenConfig
 class LLM:
     def __init__(self, cfg: SystemConfig):
         self.cfg = cfg
+
+        profile = cfg.model_profiles.get(cfg.active_profile)
+        self.model_name = profile.model_name
+        self.dtype = profile.dtype
+        self.device_map = profile.device_map
+
         self.tokenizer = AutoTokenizer.from_pretrained(cfg.model_name)
         self.model = AutoModelForCausalLM.from_pretrained(
-            cfg.model_name,
-            torch_dtype=cfg.dtype,
-            device_map=cfg.device_map
+            self.model_name,
+            torch_dtype=self.dtype,
+            device_map=self.device_map
         )
         self.pipe = pipeline("text-generation", model=self.model, tokenizer=self.tokenizer)
 
