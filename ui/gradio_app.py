@@ -319,31 +319,40 @@ def upload_plugin(file_obj) -> Dict[str, Any]:
     return {"ok": True, "saved_to": str(dst_path), "tools": list_tools()}
 
 
-def ingest_docs_jsonl(file_obj) -> Dict[str, Any]:
-    if not file_obj:
+def ingest_docs_jsonl(file_path: str) -> Dict[str, Any]:
+    if not file_path:
         return {"ok": False, "error": "No file uploaded."}
 
-    src_path = Path(file_obj.name)
-    lines = Path(src_path).read_text(encoding="utf-8").splitlines()
+    src_path = Path(file_path)
+    lines = src_path.read_text(encoding="utf-8").splitlines()
     added = 0
 
     for line in lines:
         line = line.strip()
         if not line:
             continue
+
         obj = json.loads(line)
+
         doc = Document(
             id=str(obj["id"]),
             text=str(obj["text"]),
             meta=obj.get("meta", {}) or {},
         )
+
         for inst in _MODEL_POOL:
             pipe: TaskPipeline = inst["pipeline"]
             pipe.rag_store.add(doc)
+
         added += 1
 
     pipe0 = get_any_pipeline()
-    return {"ok": True, "added": added, "docs_total_instance0": len(pipe0.rag_store.docs)}
+
+    return {
+        "ok": True,
+        "added": added,
+        "docs_total_instance0": len(pipe0.rag_store.docs)
+    }
 
 
 def rag_stats() -> Dict[str, Any]:
@@ -656,7 +665,7 @@ def build_demo() -> gr.Blocks:
                 docs_stats = gr.JSON(label="RAG Stats (instance 0)")
                 docs_refresh_btn = gr.Button("Refresh", variant="secondary")
 
-                docs_upload = gr.File(label="Upload docs (.jsonl)", file_types=[".jsonl"])
+                docs_upload = gr.File(label="Upload docs (.jsonl)", file_types=[".jsonl"], type='filepath')
                 docs_upload_btn = gr.Button("Ingest docs.jsonl", variant="primary")
                 docs_upload_out = gr.JSON(label="Ingest Result")
 
