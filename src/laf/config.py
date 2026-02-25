@@ -43,6 +43,12 @@ class SystemConfig:
     similarity_threshold: float = 0.55  # tune: 0.55-0.65 typical
     top_k_matches: int = 3
 
+
+    # rag
+    internal_only: bool = False  # 🔒 If True, never use web_search
+    rag_top_k: int = 3
+    rag_score_threshold: float = 0.55  # similarity threshold
+
     # logging
     intent_log_path: Path = Path("data/intent_logs.jsonl")
     log_if_created_new: bool = True
