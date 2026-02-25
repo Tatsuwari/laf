@@ -147,7 +147,7 @@ class TaskPipeline:
         answer = None
         if use_rag or reflect:
             tracer.emit('generator.start')
-            draft = self.generator.generate(task, plan_dict, retrieved_docs)
+            draft = self.generator.generate(task=task,plan=plan_dict,tool_results=tool_results,retrieved=retrieved_docs)
             tracer.emit('generator.draft',draft_preview=str(draft)[:500])
 
             if reflect:
