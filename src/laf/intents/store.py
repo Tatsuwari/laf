@@ -126,3 +126,128 @@ class IntentStore:
     def save(self) -> None:
         data = {k: asdict(v) for k, v in self.intents.items()}
         self.path.write_text(json.dumps(data, indent=2), encoding='utf-8')
+
+    # --- add to IntentStore ---
+
+def delete_intent(self, key: str) -> bool:
+    key = key.strip().lower()
+    if key not in self.intents:
+        return False
+    del self.intents[key]
+    return True
+
+def rename_intent(self, old_key: str, new_key: str) -> bool:
+    old_key = old_key.strip().lower()
+    new_key = new_key.strip().lower()
+    if old_key not in self.intents:
+        return False
+    if new_key in self.intents:
+        return False
+
+    rec = self.intents[old_key]
+    rec.key = new_key
+    self.intents[new_key] = rec
+    del self.intents[old_key]
+    self.recompute_centroid(new_key)
+    return True
+
+def promote_intent(
+    self,
+    key: str,
+    category_path: Optional[List[str]] = None,
+    tool: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    description: Optional[str] = None,
+) -> bool:
+    key = key.strip().lower()
+    if key not in self.intents:
+        return False
+
+    intent = self.intents[key]
+    if category_path is not None:
+        intent.category_path = category_path
+    if tool is not None:
+        intent.tool = tool
+    if tags is not None:
+        intent.tags = tags
+    if description is not None:
+        intent.description = description.strip()
+
+    self.recompute_centroid(key)
+    return True
+
+def merge_intents(
+    self,
+    target_key: str,
+    source_keys: List[str],
+    *,
+    delete_sources: bool = True,
+    prefer: str = "target",  # "target" | "source_first"
+) -> Dict[str, Any]:
+    """
+    Merge multiple intents into target_key.
+    - examples/tags are unioned
+    - schemas keep target unless missing
+    - category/tool keep target unless prefer == "source_first"
+    """
+    target_key = target_key.strip().lower()
+    if target_key not in self.intents:
+        return {"ok": False, "error": "target intent not found"}
+
+    sources = [k.strip().lower() for k in (source_keys or []) if k.strip()]
+    sources = [k for k in sources if k != target_key]
+    missing = [k for k in sources if k not in self.intents]
+    if missing:
+        return {"ok": False, "error": f"missing source intents: {missing}"}
+
+    tgt = self.intents[target_key]
+
+    def _first_nonempty(vals):
+        for v in vals:
+            if v not in (None, "", [], {}):
+                return v
+        return None
+
+    for sk in sources:
+        src = self.intents[sk]
+
+        # examples (keep unique, preserve order-ish)
+        seen = set(tgt.examples)
+        for ex in src.examples:
+            if ex not in seen:
+                tgt.examples.append(ex)
+                seen.add(ex)
+
+        # tags (set union, stable)
+        tset = set(tgt.tags)
+        for t in (src.tags or []):
+            if t not in tset:
+                tgt.tags.append(t)
+                tset.add(t)
+
+        # schemas: fill gaps
+        if tgt.input_schema is None and src.input_schema is not None:
+            tgt.input_schema = src.input_schema
+        if tgt.output_schema is None and src.output_schema is not None:
+            tgt.output_schema = src.output_schema
+
+        if prefer == "source_first":
+            tgt.tool = _first_nonempty([src.tool, tgt.tool]) or tgt.tool
+            tgt.category_path = _first_nonempty([src.category_path, tgt.category_path]) or tgt.category_path
+            tgt.description = _first_nonempty([src.description, tgt.description]) or tgt.description
+
+    # recompute centroid after merge
+    self.recompute_centroid(target_key)
+
+    if delete_sources:
+        for sk in sources:
+            self.delete_intent(sk)
+
+    return {
+        "ok": True,
+        "target": target_key,
+        "merged_sources": sources,
+        "deleted_sources": bool(delete_sources),
+        "target_examples": len(self.intents[target_key].examples),
+        "target_tags": len(self.intents[target_key].tags),
+    }
