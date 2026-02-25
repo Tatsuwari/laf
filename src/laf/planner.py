@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional, Union
 from .llm import LLM
 from .config import SystemConfig, GenConfig
 from .json_parse import safe_parse_struct
+import json
 
 from .trace import Tracer
 
@@ -23,85 +24,107 @@ class PlannerAgent:
         self.gen = GenConfig(max_new_tokens=350, do_sample=False, temperature=0.0)
 
     def _prompt(self, goal: str, catalog: Optional[Dict[str, Any]], plan_format: str = 'linear') -> str:
-        '''
+        """
         plan_format: 'linear' (default) | 'tree' | 'dag'
-        '''
-        # Provide a compact view of capabilities to keep prompt small.
-        cat = catalog or {'intents': [], 'plugins': []}
+        """
+        cat = catalog or {"intents": [], "plugins": []}
+
+        # Extract tool keys robustly (supports key/name just in case)
+        tool_names = []
+        for p in cat.get("plugins", []) or []:
+            if isinstance(p, dict):
+                k = p.get("key") or p.get("name")
+                if k:
+                    tool_names.append(str(k))
+        tool_names = sorted(set(tool_names))
+
+        intent_names = []
+        for i in cat.get("intents", []) or []:
+            if isinstance(i, dict):
+                k = i.get("key") or i.get("intent_key") or i.get("name")
+                if k:
+                    intent_names.append(str(k))
+        intent_names = sorted(set(intent_names))
+
+        # Keep the allowlist small but explicit
+        tools_allow = json.dumps(tool_names, ensure_ascii=False)
+        intents_allow = json.dumps(intent_names, ensure_ascii=False)
+
         return f"""
-You are a Planning Agent that MUST plan using the provided Intent + Plugin catalog.
+    You are a Planning Agent that MUST plan using ONLY the provided catalog.
 
-Return ONLY valid JSON.
-Do NOT include markdown.
-Use double quotes for keys and strings.
-Output must start with '{{' and end with '}}'.
+    Return ONLY valid JSON.
+    Do NOT include markdown.
+    Use double quotes for keys and strings.
+    Output must start with '{{' and end with '}}'.
 
-You are allowed to output ONE of these plan formats:
-1) linear:
-{{
-  "format": "linear",
-  "goal": "string",
-  "steps": [
-    {{"id": "1", "type": "step", "description": "string"}}
-  ]
-}}
+    IMPORTANT:
+    - The following strings are EXAMPLES ONLY and MUST NEVER appear in your output:
+    "plugin_key_from_catalog", "intent_key_from_catalog"
+    - For any tool_call, the "plugin" field MUST be one of the allowed plugin keys below.
+    - If no suitable plugin exists, output a node/step with type "manual_review" and explain what capability is missing.
 
-2) tree:
-{{
-  "format": "tree",
-  "goal": "string",
-  "root": {{
-    "id": "root",
-    "type": "category",
-    "name": "string",
-    "children": [
-      {{
-        "id": "n1",
-        "type": "intent",
-        "intent_key": "intent_key_from_catalog",
-        "description": "string",
-        "children": [
-          {{
-            "id": "n1.1",
-            "type": "tool_call",
-            "plugin": "plugin_key_from_catalog",
-            "args": {{}},
-            "description": "string"
-          }}
-        ]
-      }}
+    Allowed plugin keys (tool_call.plugin MUST be EXACTLY one of these):
+    {tools_allow}
+
+    Allowed intent keys (intent_key SHOULD be one of these, if you use intents):
+    {intents_allow}
+
+    You are allowed to output ONE of these plan formats:
+
+    1) linear:
+    {{
+    "format": "linear",
+    "goal": "string",
+    "steps": [
+        {{"id":"1","type":"tool_call","plugin":"{tool_names[0] if tool_names else 'manual_review'}","args":{{}},"description":"string"}}
     ]
-  }}
-}}
+    }}
 
-3) dag:
-{{
-  "format": "dag",
-  "goal": "string",
-  "nodes": [
-    {{"id":"n1","type":"intent","intent_key":"intent_key_from_catalog","description":"string"}},
-    {{"id":"n2","type":"tool_call","plugin":"plugin_key_from_catalog","args":{{}},"description":"string"}}
-  ],
-  "edges": [
-    {{"from":"n1","to":"n2","data":"optional_string"}}
-  ]
-}}
+    2) tree:
+    {{
+    "format": "tree",
+    "goal": "string",
+    "root": {{
+        "id":"root",
+        "type":"category",
+        "name":"string",
+        "children":[
+        {{
+            "id":"n1",
+            "type":"tool_call",
+            "plugin":"{tool_names[0] if tool_names else 'manual_review'}",
+            "args":{{}},
+            "description":"string"
+        }}
+        ]
+    }}
+    }}
 
-Rules:
-- Prefer format "{plan_format}" unless it is impossible.
-- Use ONLY intent keys and plugin keys that exist in the catalog.
-- If you need a capability that doesn't exist, output a step/node with type "manual_review" and explain what is missing.
-- Keep steps small, concrete, and actionable.
-- Maximum steps/nodes: {self.cfg.max_steps}.
+    3) dag:
+    {{
+    "format":"dag",
+    "goal":"string",
+    "nodes":[
+        {{"id":"n1","type":"tool_call","plugin":"{tool_names[0] if tool_names else 'manual_review'}","args":{{}},"description":"string"}}
+    ],
+    "edges":[]
+    }}
 
-Intent Catalog (subset):
-{cat.get("intents", [])}
+    Rules:
+    - Prefer format "{plan_format}" unless it is impossible.
+    - Keep steps small, concrete, and actionable.
+    - Maximum steps/nodes: {self.cfg.max_steps}.
 
-Plugin Catalog (subset):
-{cat.get("plugins", [])}
+    Catalog (subset):
+    Intent Catalog:
+    {cat.get("intents", [])}
 
-User Goal: {goal}
-"""
+    Plugin Catalog:
+    {cat.get("plugins", [])}
+
+    User Goal: {goal}
+    """.strip()
 
 
     def plan(

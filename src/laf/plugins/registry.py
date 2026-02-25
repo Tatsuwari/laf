@@ -25,6 +25,9 @@ class ToolRegistry:
     def has(self, name: str) -> bool:
         return name in self.tools
     
+    def clear(self) -> None:
+        self.tools.clear()
+    
     def validate_args(self, schema: dict, args: Dict[str, Any]) -> Tuple[bool, str]:
         '''
         Minimal schema validator:

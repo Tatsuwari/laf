@@ -307,9 +307,12 @@ def upload_plugin(file_obj) -> Dict[str, Any]:
     dst_path = plugin_dir / src_path.name
     shutil.copyfile(src_path, dst_path)
 
+    # BEST: rebuild ALL instances so tools are consistent everywhere
+    reset_pool()
+
     for inst in _MODEL_POOL:
         pipe: TaskPipeline = inst["pipeline"]
-        pipe.tools = ToolRegistry()
+        pipe.tools.clear()
         setup_builtins(pipe.tools)
         load_plugins(_CFG.plugin_dir, pipe.tools)
 

@@ -57,7 +57,10 @@ class TaskPipeline:
         full_catalog = build_capability_catalog(self.router.store, self.tools, include_examples=True)
         prompt_catalog = summarize_catalog(full_catalog, max_items=50)
         tracer.emit('catalog.built', intents=len(full_catalog.get('intents', [])), plugins=len(full_catalog.get('plugins', [])))
-
+        
+        # Debugging aid: snapshot tool keys in tracer for easy reference
+        tracer.emit("tools.snapshot", tool_keys=sorted(list(self.tools.tools.keys())))
+        
         # plan_format should come from cfg; keep backward compatible default
         plan_format = getattr(self.cfg, 'plan_format', 'linear')
 
@@ -68,8 +71,10 @@ class TaskPipeline:
 
         tracer.emit('plan.ir', format=plan_ir.format(), goal=plan_ir.goal())
 
-        # review
+        # review (always bind reviewer to current registry)
+        self.planner_reviewer = PlannerReviewer(self.tools)
         review = self.planner_reviewer.review(plan_dict, catalog=full_catalog)
+
         tracer.emit('planner.review', ok=review.ok, issues=[ vars(i) for i in review.issues ])
 
 
