@@ -1,9 +1,0 @@
-data
-.git
-__pycache__/
-*.pyc
-.venv/
-venv/
-dist/
-build/
-.DS_Store

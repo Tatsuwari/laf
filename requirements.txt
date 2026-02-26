@@ -1,8 +1,0 @@
-fastapi
-uvicorn
-transformers
-accelerate
-torch
-sentence-transformers
-pydantic
-gradio
